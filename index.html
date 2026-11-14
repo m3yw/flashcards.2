@@ -1,0 +1,2113 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>فلاش كاردز برو | بطاقات الاستذكار الذكية</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Tajawal', sans-serif; background-color: #f8fafc; }
+    .card-shadow { box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.06); }
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+
+    .provider-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+      padding: 10px 6px; border-radius: 12px; border: 1px solid #e2e8f0; background: #f8fafc;
+      font-size: 12px; font-weight: 800; color: #475569; transition: .15s; line-height: 1.2; }
+    .provider-btn:hover { border-color: #c7d2fe; background: #eef2ff; }
+    .provider-btn.active { border-color: #4f46e5; background: #eef2fe; color: #4338ca; box-shadow: 0 0 0 2px rgba(79,70,229,.15); }
+    .provider-btn small { font-size: 10px; font-weight: 600; opacity: .75; }
+
+    #toast { transition: opacity .2s; }
+    .spin-slow { animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body class="text-slate-800 min-h-screen flex flex-col">
+
+  <!-- الشريط العلوي -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-2.5">
+        <div class="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-extrabold text-xl shadow-sm">ف</div>
+        <div>
+          <h1 class="font-extrabold text-lg text-slate-900 leading-tight">فلاش كاردز برو</h1>
+          <p class="text-xs text-slate-500">إنشاء ومذاكرة بطاقات الاختيار من متعدد</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 bg-slate-100 p-1 rounded-xl">
+        <button id="tabCreate" onclick="switchTab('create')" class="px-4 py-1.5 rounded-lg text-sm font-bold bg-white text-indigo-600 shadow-sm transition">إضافة بطاقات</button>
+        <button id="tabStudy" onclick="switchTab('study')" class="px-4 py-1.5 rounded-lg text-sm font-bold text-slate-600 hover:text-slate-900 transition">وضع المذاكرة (<span id="cardsCountBadge">0</span>)</button>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <button type="button" onclick="openAiModal()" class="px-3 py-1.5 text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition flex items-center gap-1.5" title="إعدادات مساعد الذكاء الاصطناعي">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+          مساعد AI: <span id="aiProviderBadge">Gemini</span>
+        </button>
+        <button type="button" onclick="exportCards()" class="px-3 py-1.5 text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition">تصدير JSON</button>
+        <label class="px-3 py-1.5 text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-200 transition cursor-pointer">
+          استيراد JSON
+          <input type="file" id="importInput" accept=".json,application/json" class="hidden" onchange="importCards(event)" />
+        </label>
+      </div>
+    </div>
+  </header>
+
+  <!-- المحتوى الرئيسي -->
+  <main class="flex-1 max-w-6xl w-full mx-auto px-4 py-6">
+
+    <!-- تحذير التخزين -->
+    <div id="storageWarning" class="hidden mb-5 bg-rose-50 border border-rose-300 text-rose-800 rounded-2xl p-4 flex items-start gap-3">
+      <svg class="w-5 h-5 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"></path></svg>
+      <div class="flex-1">
+        <p class="text-sm font-extrabold">تعذّر الحفظ في المتصفح</p>
+        <p id="storageWarningText" class="text-xs mt-1 leading-relaxed"></p>
+      </div>
+      <button type="button" onclick="hideStorageWarning()" class="text-rose-500 hover:text-rose-700 font-bold">✕</button>
+    </div>
+
+    <!-- قسم الإضافة والتحرير -->
+    <div id="createView" class="space-y-6">
+
+      <!-- شريط اللصق الذكي السريع -->
+      <div class="bg-gradient-to-l from-indigo-50 to-blue-50 border border-indigo-200 rounded-2xl p-4 flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-start gap-3">
+          <div class="w-10 h-10 rounded-xl bg-indigo-600/10 text-indigo-600 flex items-center justify-center shrink-0 mt-0.5">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+          </div>
+          <div>
+            <h2 class="font-bold text-indigo-950 text-sm">اللصق الذكي للقطات الشاشة (Ctrl + V في أي مكان)</h2>
+            <p class="text-xs text-indigo-800/80 mt-0.5">الصق لقطة شاشة لسؤال مع خياراته، أو ارفعها، وسيستخرج الموقع النص ويقسم السؤال والخيارات — ثم يستطيع المساعد الذكي تصحيح التقسيم وحل السؤال.</p>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 shrink-0">
+          <button type="button" onclick="runAiAnalysis()" class="px-4 py-2 bg-white border border-indigo-300 text-indigo-700 hover:bg-indigo-50 text-xs font-extrabold rounded-xl transition shadow-sm flex items-center gap-1.5">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"></path></svg>
+            تحليل وحل بالـ AI
+          </button>
+          <label class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl cursor-pointer transition shadow-sm">
+            رفع لقطة شاشة
+            <input type="file" accept="image/*" class="hidden" onchange="handleSmartScreenshotUpload(event)" />
+          </label>
+        </div>
+      </div>
+
+      <div id="ocrStatus" class="hidden bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-xl text-sm font-medium items-center gap-2">
+        <svg class="animate-spin h-4 w-4 text-amber-600 shrink-0" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+        <span id="ocrStatusText">جاري تحليل الصورة وفصل السؤال عن الخيارات...</span>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- نموذج الإدخال -->
+        <div class="lg:col-span-7 bg-white rounded-2xl border border-slate-200 p-5 card-shadow space-y-5">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h3 id="formTitle" class="font-extrabold text-base text-slate-800">بطاقة جديدة</h3>
+            <button type="button" onclick="resetForm()" class="text-xs text-slate-500 hover:text-rose-600 font-medium">مسح الحقول</button>
+          </div>
+
+          <!-- التصنيف -->
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1" for="cardCategory">المجلد / التصنيف (اختياري)</label>
+            <input type="text" id="cardCategory" dir="auto" placeholder="مثال: تناظر لفظي، قدرات كمي، تحصيلي..." class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500 focus:bg-white transition" oninput="updatePreview()" />
+          </div>
+
+          <!-- السؤال -->
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <label class="text-xs font-bold text-slate-700" for="questionText">نص السؤال</label>
+              <label class="text-xs text-indigo-600 hover:text-indigo-800 font-bold cursor-pointer flex items-center gap-1">
+                <span>+ إرفاق صورة للسؤال</span>
+                <input type="file" accept="image/*" class="hidden" onchange="handleImageUpload(event, 'question')" />
+              </label>
+            </div>
+            <textarea id="questionText" dir="auto" rows="2" placeholder="اكتب السؤال هنا أو الصق صورة مباشرة داخل المربع..." class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500 focus:bg-white transition" oninput="updatePreview()" onpaste="handleBoxPaste(event, 'question')"></textarea>
+            <div id="questionImgPreview" class="hidden relative inline-block">
+              <img id="questionImg" alt="صورة السؤال" class="max-h-40 rounded-lg border border-slate-200" />
+              <button type="button" onclick="removeImage('question')" class="absolute -top-2 -right-2 bg-rose-500 text-white w-6 h-6 rounded-full text-xs font-bold shadow" title="إزالة الصورة">×</button>
+            </div>
+          </div>
+
+          <!-- الخيارات الأربعة -->
+          <div class="space-y-3">
+            <label class="block text-xs font-bold text-slate-700">الخيارات الأربعة (حدد الدائرة بجانب الإجابة الصحيحة)</label>
+            <div id="optionsContainer" class="space-y-2.5"></div>
+          </div>
+
+          <!-- الشرح -->
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1" for="cardExplanation">توضيح / شرح الإجابة (اختياري)</label>
+            <input type="text" id="cardExplanation" dir="auto" placeholder="اكتب سبب اختيار الإجابة الصحيحة ليظهر بعد الحل..." class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500 focus:bg-white transition" oninput="updatePreview()" />
+          </div>
+
+          <div class="pt-2 flex gap-3">
+            <button type="button" onclick="saveCard()" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-4 rounded-xl text-sm transition shadow-sm">
+              حفظ البطاقة
+            </button>
+          </div>
+        </div>
+
+        <!-- المعاينة الحية وقائمة البطاقات -->
+        <div class="lg:col-span-5 space-y-6">
+
+          <!-- المعاينة الحية -->
+          <div class="bg-white rounded-2xl border border-slate-200 p-5 card-shadow">
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">معاينة حية للبطاقة</span>
+              <span id="previewBadge" class="text-[11px] font-bold bg-indigo-50 text-indigo-600 px-2.5 py-0.5 rounded-full">عام</span>
+            </div>
+            <div id="livePreviewArea" class="space-y-4">
+              <p id="previewQText" class="font-bold text-slate-800 text-base">سيظهر نص السؤال هنا...</p>
+              <img id="previewQImg" alt="معاينة صورة السؤال" class="hidden max-h-44 rounded-xl border border-slate-100 mx-auto" />
+              <div id="previewOptions" class="grid grid-cols-1 gap-2"></div>
+            </div>
+          </div>
+
+          <!-- قائمة البطاقات المحفوظة -->
+          <div class="bg-white rounded-2xl border border-slate-200 p-5 card-shadow">
+            <div class="flex items-center justify-between mb-1">
+              <h3 class="font-bold text-sm text-slate-800">البطاقات المحفوظة (<span id="savedListCount">0</span>)</h3>
+              <button type="button" onclick="clearAllCards()" class="text-xs text-rose-500 hover:underline">حذف الكل</button>
+            </div>
+            <p id="storageMeter" class="text-[11px] text-slate-400 mb-3">—</p>
+            <div id="savedCardsList" class="space-y-2 max-h-72 overflow-y-auto custom-scrollbar pr-1"></div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- قسم المذاكرة والاختبار -->
+    <div id="studyView" class="hidden max-w-3xl mx-auto space-y-5">
+
+      <!-- شريط التحكم بالمذاكرة -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-4 card-shadow flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-2">
+          <select id="studyCategoryFilter" onchange="startStudySession()" class="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none">
+            <option value="all">جميع التصنيفات</option>
+          </select>
+          <button type="button" onclick="shuffleStudyCards()" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition">خلط عشوائي</button>
+        </div>
+
+        <div class="flex items-center gap-4 text-xs font-bold">
+          <span class="text-emerald-600">صحيح: <span id="scoreCorrect">0</span></span>
+          <span class="text-rose-600">خطأ: <span id="scoreWrong">0</span></span>
+          <span class="bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-lg" id="studyProgress">0 / 0</span>
+        </div>
+      </div>
+
+      <!-- بطاقة الاختبار -->
+      <div id="studyCardContainer" class="bg-white rounded-2xl border border-slate-200 p-6 md:p-8 card-shadow min-h-[340px] flex flex-col justify-between">
+
+        <div id="studyEmptyState" class="hidden text-center py-16 space-y-3">
+          <p class="text-slate-500 font-bold">لا توجد بطاقات للمذاكرة حالياً.</p>
+          <button type="button" onclick="switchTab('create')" class="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold">أضف بطاقتك الأولى</button>
+        </div>
+
+        <!-- ملخص نهاية الجلسة -->
+        <div id="studySummary" class="hidden text-center py-10 space-y-4">
+          <div class="w-16 h-16 mx-auto rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-2xl font-extrabold">✓</div>
+          <h3 class="font-extrabold text-lg">انتهت الجلسة</h3>
+          <p id="summaryNote" class="text-xs text-slate-500"></p>
+          <div class="flex items-center justify-center gap-6 text-sm font-bold">
+            <span class="text-emerald-600">صحيح: <span id="summaryCorrect">0</span></span>
+            <span class="text-rose-600">خطأ: <span id="summaryWrong">0</span></span>
+            <span class="text-slate-500">الكل: <span id="summaryTotal">0</span></span>
+          </div>
+          <div class="flex flex-wrap items-center justify-center gap-2 pt-2">
+            <button type="button" id="btnStudyWrong" onclick="studyWrongOnly()" class="hidden px-4 py-2 bg-rose-50 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold">مذاكرة الأخطاء فقط</button>
+            <button type="button" onclick="startStudySession()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold">جلسة جديدة</button>
+          </div>
+        </div>
+
+        <div id="studyActiveContent" class="space-y-6">
+          <div class="flex items-center justify-between">
+            <span id="studyCardCat" class="text-xs font-bold bg-slate-100 text-slate-600 px-3 py-1 rounded-full">عام</span>
+            <button type="button" onclick="editCurrentStudyCard()" class="text-xs text-indigo-600 hover:underline font-bold">تعديل البطاقة</button>
+          </div>
+
+          <div class="space-y-3">
+            <h2 id="studyQText" class="text-lg md:text-xl font-extrabold text-slate-900 leading-relaxed"></h2>
+            <img id="studyQImg" alt="صورة السؤال" onclick="openLightbox(this.src)" class="hidden max-h-60 rounded-xl border border-slate-200 mx-auto cursor-zoom-in" />
+          </div>
+
+          <div id="studyOptionsGrid" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+
+          <div id="studyExplanationBox" class="hidden bg-indigo-50/70 border border-indigo-100 rounded-xl p-4 text-sm text-indigo-950">
+            <span class="font-extrabold block mb-1 text-indigo-700">التوضيح:</span>
+            <p id="studyExplanationText"></p>
+          </div>
+        </div>
+
+        <div id="studyNavBar" class="pt-6 mt-6 border-t border-slate-100 flex items-center justify-between">
+          <button type="button" onclick="prevStudyCard()" id="btnPrevCard" class="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-40">السابق</button>
+          <button type="button" onclick="nextStudyCard()" id="btnNextCard" class="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm">السؤال التالي</button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- نافذة تكبير الصور -->
+  <div id="lightboxModal" onclick="if(event.target===this)closeLightbox()" class="hidden fixed inset-0 bg-black/80 z-50 items-center justify-center p-4 cursor-zoom-out">
+    <img id="lightboxImg" alt="صورة مكبّرة" class="max-w-full max-h-[90vh] rounded-xl shadow-2xl" />
+  </div>
+
+  <!-- نافذة إعدادات الذكاء الاصطناعي -->
+  <div id="aiModal" class="hidden fixed inset-0 bg-slate-900/60 z-50 overflow-y-auto p-3 md:p-6" onclick="if(event.target===this)closeAiModal()">
+    <div class="bg-white w-full max-w-2xl mx-auto rounded-2xl shadow-2xl border border-slate-200">
+
+      <div class="flex items-start justify-between p-4 border-b border-slate-100">
+        <div class="flex items-start gap-3">
+          <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-fuchsia-500 to-indigo-600 text-white flex items-center justify-center shrink-0">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+          </div>
+          <div>
+            <h3 class="font-extrabold text-sm text-slate-900">مساعد الذكاء الاصطناعي</h3>
+            <p class="text-[11px] text-slate-500 mt-0.5">يقرأ كلمات السؤال، يفصل الخيارات، ويحدد الإجابة الصحيحة ويكتب الشرح.</p>
+          </div>
+        </div>
+        <button type="button" onclick="closeAiModal()" class="text-slate-400 hover:text-slate-700 text-xl font-bold leading-none px-1" title="إغلاق">✕</button>
+      </div>
+
+      <div class="p-4 space-y-4">
+
+        <!-- اختيار المزود -->
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-2">1) اختر المساعد</label>
+          <div id="aiProviderGrid" class="grid grid-cols-3 gap-2">
+            <button type="button" class="provider-btn" data-provider="gemini" onclick="setProvider('gemini')">
+              Gemini
+              <small>Google</small>
+            </button>
+            <button type="button" class="provider-btn" data-provider="openai" onclick="setProvider('openai')">
+              ChatGPT
+              <small>OpenAI</small>
+            </button>
+            <button type="button" class="provider-btn" data-provider="deepseek" onclick="setProvider('deepseek')">
+              DeepSeek
+              <small>DeepSeek</small>
+            </button>
+          </div>
+        </div>
+
+        <!-- النص المصدر -->
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label class="block text-xs font-bold text-slate-600" for="aiSourceBox">2) نص المصدر — الكلمات التي سيُنسخ منها</label>
+            <button type="button" onclick="refillAiSource()" class="text-[11px] text-indigo-600 font-bold hover:underline">تحديث من النموذج</button>
+          </div>
+          <textarea id="aiSourceBox" dir="auto" rows="4" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs custom-scrollbar focus:outline-none focus:border-indigo-500 focus:bg-white" placeholder="الصق هنا نص السؤال والخيارات كما هو (سطر لكل عنصر)..."></textarea>
+          <div class="flex items-center justify-between gap-2 mt-2">
+            <label class="flex items-center gap-1.5 text-[11px] font-bold text-slate-600 cursor-pointer">
+              <input type="checkbox" id="aiUseImage" checked class="w-3.5 h-3.5 accent-indigo-600 cursor-pointer" />
+              إرسال صورة السؤال مع النص (أدق بكثير للنص العربي)
+            </label>
+            <img id="aiImageThumb" alt="الصورة المرفقة" class="hidden h-10 rounded-lg border border-slate-200" />
+          </div>
+        </div>
+
+        <!-- الموديل والمفتاح -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1" for="aiModelInput">3) الموديل</label>
+            <input type="text" id="aiModelInput" list="aiModelOptions" oninput="onAiModelChange(this.value)" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:border-indigo-500" />
+            <datalist id="aiModelOptions"></datalist>
+            <p class="text-[10px] text-slate-400 mt-1">قابل للتعديل — ضع اسم الموديل الذي يوفره حسابك.</p>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1" for="aiKeyInput">مفتاح API</label>
+            <div class="flex gap-1.5">
+              <input type="password" id="aiKeyInput" autocomplete="off" oninput="onAiKeyChange(this.value)" placeholder="sk-..." class="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:border-indigo-500" dir="ltr" />
+              <button type="button" onclick="clearAiKey()" class="px-2.5 py-2 bg-slate-100 hover:bg-rose-50 hover:text-rose-600 text-slate-500 rounded-xl text-xs font-bold border border-slate-200" title="حذف المفتاح المحفوظ">حذف</button>
+            </div>
+            <p class="text-[10px] text-slate-400 mt-1" id="aiKeyHint">—</p>
+          </div>
+        </div>
+
+        <p class="text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 leading-relaxed">
+          يُحفظ المفتاح في هذا المتصفح فقط (localStorage) ويُرسل مباشرة من جهازك إلى مزوّد الخدمة، لا يمر بأي خادم آخر.
+          احصل على مفتاحك من <a id="aiDocLink" href="#" target="_blank" rel="noopener" class="text-indigo-600 font-bold underline">لوحة المزوّد</a>.
+          وإن كان المزوّد يمنع الاتصال من المتصفح، استخدم <b>وضع النسخ واللصق</b> بالأسفل فهو يعمل دائماً.
+        </p>
+
+        <!-- الأزرار -->
+        <div class="flex flex-wrap gap-2">
+          <button type="button" onclick="runAiAnalysis()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold rounded-xl transition shadow-sm">تحليل وحل مباشر</button>
+          <button type="button" onclick="buildAndCopyPrompt()" class="px-4 py-2 bg-white border border-indigo-300 text-indigo-700 hover:bg-indigo-50 text-xs font-bold rounded-xl transition">نسخ البرومبت (بدون مفتاح)</button>
+          <button type="button" onclick="testAiConnection()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition">اختبار الاتصال</button>
+        </div>
+
+        <div id="aiStatus" class="hidden text-xs font-bold rounded-xl px-3 py-2"></div>
+      </div>
+
+      <!-- وضع النسخ واللصق -->
+      <details class="border-t border-slate-100 px-4 py-3">
+        <summary class="cursor-pointer text-xs font-extrabold text-slate-700 select-none">وضع النسخ واللصق (يعمل بدون مفتاح API)</summary>
+        <div class="space-y-3 pt-3">
+          <ol class="text-[11px] text-slate-500 space-y-1 list-decimal list-inside leading-relaxed">
+            <li>اضغط «نسخ البرومبت» أو انسخ النص من المربع الأول.</li>
+            <li>الصقه في Gemini أو ChatGPT أو DeepSeek (أو أرفق معه صورة السؤال).</li>
+            <li>انسخ رد المساعد كاملاً والصقه في المربع الثاني ثم اضغط «تعبئة الحقول».</li>
+          </ol>
+          <textarea id="aiPromptBox" rows="5" readonly class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-mono custom-scrollbar focus:outline-none" placeholder="سيظهر هنا نص البرومبت..."></textarea>
+          <textarea id="aiReplyBox" rows="5" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-[11px] font-mono custom-scrollbar focus:outline-none focus:border-indigo-500" placeholder='الصق هنا رد المساعد (JSON): {"question":"...","options":["...","...","...","..."],"correctIndex":0,"explanation":"..."}' dir="ltr"></textarea>
+          <div class="flex flex-wrap gap-2">
+            <button type="button" onclick="copyPromptBox()" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl">نسخ البرومبت</button>
+            <button type="button" onclick="fillFromReply()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl">تعبئة الحقول من الرد</button>
+          </div>
+        </div>
+      </details>
+    </div>
+  </div>
+
+  <!-- إشعار عائم -->
+  <div id="toast" class="hidden fixed bottom-5 left-1/2 -translate-x-1/2 z-[60] max-w-[92vw] px-4 py-2.5 rounded-xl text-sm font-bold shadow-lg"></div>
+
+  <script>
+    /* =========================================================
+       ثوابت ومساعدات عامة
+       ========================================================= */
+    const STORAGE_KEY = 'flashcards_pro_v3_data';
+    const AI_STORAGE_KEY = 'flashcards_pro_v3_ai';
+    const MAX_IMAGE_SIDE = 900;
+    const MAX_DATAURL_CHARS = 420000;
+
+    const optionLetters = ['أ', 'ب', 'ج', 'د'];
+    const $ = (id) => document.getElementById(id);
+
+    const ENTITIES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+
+    /* يهرّب أي قيمة إلى نص آمن للـ HTML (ولا ينفجر على الأرقام) */
+    function esc(value) {
+      const s = (value === null || value === undefined) ? '' : String(value);
+      return s.replace(/[&<>"']/g, (m) => ENTITIES[m]);
+    }
+
+    function newId() {
+      try {
+        if (window.crypto && typeof window.crypto.randomUUID === 'function') return window.crypto.randomUUID();
+      } catch (e) { /* تجاهل */ }
+      return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    }
+
+    /* يقبل فقط صور data: محلية — يمنع حقن HTML ويمنع الصور البعيدة */
+    function safeImage(value) {
+      if (typeof value !== 'string') return '';
+      const s = value.trim();
+      if (!/^data:image\/(png|jpe?g|webp|gif|bmp);base64,/i.test(s)) return '';
+      return s.length <= 6000000 ? s : '';
+    }
+
+    let toastTimer = null;
+    function toast(message, kind) {
+      const box = $('toast');
+      if (!box) return;
+      box.textContent = String(message || '');
+      const palette = kind === 'err'
+        ? 'bg-rose-600 text-white'
+        : kind === 'warn'
+          ? 'bg-amber-500 text-white'
+          : 'bg-slate-900 text-white';
+      box.className = 'fixed bottom-5 left-1/2 -translate-x-1/2 z-[60] max-w-[92vw] px-4 py-2.5 rounded-xl text-sm font-bold shadow-lg ' + palette;
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => box.classList.add('hidden'), 4500);
+    }
+
+    function setImg(el, src) {
+      if (!el) return;
+      if (src) {
+        el.src = src;
+        el.classList.remove('hidden');
+      } else {
+        el.removeAttribute('src');
+        el.classList.add('hidden');
+      }
+    }
+
+    function showStorageWarning(message) {
+      $('storageWarningText').textContent = message;
+      $('storageWarning').classList.remove('hidden');
+    }
+    function hideStorageWarning() {
+      $('storageWarning').classList.add('hidden');
+    }
+
+    /* =========================================================
+       البيانات: تحميل / تحقق / حفظ
+       ========================================================= */
+    let cards = [];
+    let editingCardId = null;
+
+    let formState = {
+      questionImg: '',
+      options: [
+        { text: '', img: '' }, { text: '', img: '' }, { text: '', img: '' }, { text: '', img: '' }
+      ],
+      correctIndex: 0
+    };
+
+    /* جلسة المذاكرة: إجابات مربوطة بمعرّف البطاقة (لا احتساب مزدوج) */
+    let session = { list: [], answers: new Map(), idx: 0, filter: 'all', finished: false };
+
+    let lastRawOcrText = '';
+    let lastSourceImage = '';
+    let lastAiLines = [];
+    let aiSourceDirty = false;
+    let ocrBusy = false;
+    let ocrHideTimer = null;
+
+    function normalizeOption(raw) {
+      if (typeof raw === 'string') return { text: raw.trim(), img: '' };
+      if (!raw || typeof raw !== 'object') return { text: '', img: '' };
+      return {
+        text: typeof raw.text === 'string' ? raw.text.trim() : '',
+        img: safeImage(raw.img)
+      };
+    }
+
+    /* يعيد بطاقة سليمة أو null إذا كانت غير قابلة للاستخدام */
+    function normalizeCard(raw) {
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+
+      const incoming = Array.isArray(raw.options) ? raw.options : [];
+      const options = [];
+      for (let i = 0; i < 4; i++) options.push(normalizeOption(incoming[i]));
+
+      const questionText = typeof raw.questionText === 'string' ? raw.questionText.trim() : '';
+      const questionImg = safeImage(raw.questionImg);
+      if (!questionText && !questionImg) return null;
+      if (!options.some((o) => o.text || o.img)) return null;
+
+      const ci = Number(raw.correctIndex);
+      const id = (typeof raw.id === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(raw.id)) ? raw.id : newId();
+
+      return {
+        id,
+        category: (typeof raw.category === 'string' ? raw.category.trim() : '') || 'عام',
+        questionText,
+        questionImg,
+        options,
+        correctIndex: (Number.isInteger(ci) && ci >= 0 && ci <= 3) ? ci : 0,
+        explanation: typeof raw.explanation === 'string' ? raw.explanation.trim() : ''
+      };
+    }
+
+    /* ينظّف أي مصفوفة بطاقات ويولّد معرّفات جديدة للمكرر منها */
+    function sanitizeList(list) {
+      const seen = new Set();
+      const out = [];
+      list.forEach((item) => {
+        const card = normalizeCard(item);
+        if (!card) return;
+        if (seen.has(card.id)) card.id = newId();
+        seen.add(card.id);
+        out.push(card);
+      });
+      return out;
+    }
+
+    /* ترحيل بطاقات الإصدار السابق (v2) عند أول تشغيل */
+    function migrateLegacy() {
+      const legacyKeys = ['flashcards_pro_v2_data'];
+      for (let i = 0; i < legacyKeys.length; i++) {
+        let text = null;
+        try { text = localStorage.getItem(legacyKeys[i]); } catch (err) { text = null; }
+        if (!text) continue;
+
+        let parsed = null;
+        try { parsed = JSON.parse(text); } catch (err) { continue; }
+        const list = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.cards) ? parsed.cards : null);
+        if (!list || !list.length) continue;
+
+        const migrated = sanitizeList(list);
+        if (!migrated.length) continue;
+
+        cards = migrated;
+        const saved = persistCards();
+        toast('تم ترحيل ' + migrated.length + ' بطاقة من الإصدار السابق' + (saved ? ' ✔' : ' — لكن لم تُحفظ!'), saved ? 'ok' : 'err');
+        return migrated;
+      }
+      return [];
+    }
+
+    function loadCards() {
+      let text = null;
+      try { text = localStorage.getItem(STORAGE_KEY); } catch (err) { text = null; }
+
+      let raw = null;
+      if (text) {
+        try {
+          raw = JSON.parse(text);
+        } catch (err) {
+          console.warn('بيانات محفوظة تالفة، سيتم تجاهلها', err);
+          showStorageWarning('كانت البيانات المحفوظة في الإصدار الجديد تالفة، فبدأنا بقائمة فارغة. سنحاول قراءة بطاقات الإصدار السابق تلقائياً.');
+          raw = null;
+        }
+      }
+
+      /* لا يوجد مفتاح جديد أصلاً (أو كان تالفاً) → نحاول ترحيل الإصدار السابق */
+      if (!text || raw === null) {
+        const migrated = migrateLegacy();
+        if (migrated.length) return migrated;
+      }
+
+      return Array.isArray(raw) ? sanitizeList(raw) : [];
+    }
+
+    function persistCards() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(cards));
+        hideStorageWarning();
+        updateStorageMeter();
+        return true;
+      } catch (err) {
+        showStorageWarning('تعذّر حفظ البطاقات في هذا المتصفح (' + (err && err.name ? err.name : 'خطأ') +
+          '). السبب الأشيع هو امتلاء مساحة التخزين بالصور. صدّر نسخة JSON الآن، أو احذف بعض الصور/البطاقات. ' +
+          'البطاقات الحالية موجودة في الصفحة لكنها ستضيع عند إعادة التحميل.');
+        return false;
+      }
+    }
+
+    function updateStorageMeter() {
+      const meter = $('storageMeter');
+      if (!meter) return;
+      let bytes = 0;
+      try { bytes = new Blob([JSON.stringify(cards)]).size; } catch (e) { bytes = 0; }
+      const mb = bytes / (1024 * 1024);
+      const full = 5;
+      meter.textContent = 'حجم البيانات المحفوظة: ' + mb.toFixed(2) + ' ميجابايت من أصل ~' + full + ' ميجابايت متاحة.';
+      meter.className = 'text-[11px] mb-3 ' + (mb > 3.6 ? 'text-rose-600 font-bold' : mb > 2.4 ? 'text-amber-600' : 'text-slate-400');
+    }
+
+    /* =========================================================
+       الصور: ضغط + إرفاق + لصق
+       ========================================================= */
+    function compressImage(file, options) {
+      const opt = options || {};
+      const limit = opt.maxSide || MAX_IMAGE_SIDE;
+      const maxChars = opt.maxChars || MAX_DATAURL_CHARS;
+      const startQuality = opt.quality || 0.85;
+      return new Promise((resolve, reject) => {
+        if (!file || !file.type || file.type.indexOf('image/') !== 0) {
+          reject(new Error('الملف ليس صورة'));
+          return;
+        }
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+          try {
+            let w = img.naturalWidth || img.width;
+            let h = img.naturalHeight || img.height;
+            if (!w || !h) throw new Error('أبعاد الصورة غير معروفة');
+            const scale = Math.min(1, limit / Math.max(w, h));
+            w = Math.max(1, Math.round(w * scale));
+            h = Math.max(1, Math.round(h * scale));
+
+            const canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) throw new Error('المتصفح لا يدعم معالجة الصور');
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, w, h);
+            ctx.drawImage(img, 0, 0, w, h);
+
+            let quality = startQuality;
+            let out = canvas.toDataURL('image/jpeg', quality);
+            while (out.length > maxChars && quality > 0.4) {
+              quality -= 0.1;
+              out = canvas.toDataURL('image/jpeg', quality);
+            }
+            URL.revokeObjectURL(url);
+            resolve(out);
+          } catch (err) {
+            URL.revokeObjectURL(url);
+            reject(err);
+          }
+        };
+        img.onerror = () => {
+          URL.revokeObjectURL(url);
+          reject(new Error('تعذّر قراءة الصورة (تنسيق غير مدعوم؟)'));
+        };
+        img.src = url;
+      });
+    }
+
+    async function handleImageUpload(event, target) {
+      const input = event.target;
+      const file = input.files && input.files[0];
+      input.value = '';
+      if (!file) return;
+      try {
+        const dataUrl = await compressImage(file);
+        applyImageToTarget(target, dataUrl);
+      } catch (err) {
+        toast('تعذّر معالجة الصورة: ' + err.message, 'err');
+      }
+    }
+
+    async function handleBoxPaste(event, target) {
+      const dt = event.clipboardData || (event.originalEvent && event.originalEvent.clipboardData);
+      if (!dt) return;
+      const items = Array.prototype.slice.call(dt.items || []);
+      const item = items.filter((i) => i.kind === 'file' && i.type.indexOf('image/') === 0)[0];
+      if (!item) return;
+      event.preventDefault();
+      const file = item.getAsFile();
+      if (!file) return;
+      try {
+        const dataUrl = await compressImage(file);
+        applyImageToTarget(target, dataUrl);
+      } catch (err) {
+        toast('تعذّر معالجة الصورة: ' + err.message, 'err');
+      }
+    }
+
+    function applyImageToTarget(target, dataUrl) {
+      if (target === 'question') {
+        formState.questionImg = dataUrl;
+        lastSourceImage = dataUrl;
+        aiSourceDirty = false;
+        setImg($('questionImg'), dataUrl);
+        $('questionImgPreview').classList.remove('hidden');
+      } else {
+        formState.options[Number(target)].img = dataUrl;
+        renderOptionInputs();
+      }
+      updatePreview();
+    }
+
+    function removeImage(target) {
+      if (target === 'question') {
+        formState.questionImg = '';
+        lastSourceImage = '';
+        setImg($('questionImg'), '');
+        $('questionImgPreview').classList.add('hidden');
+      } else {
+        formState.options[Number(target)].img = '';
+        renderOptionInputs();
+      }
+      updatePreview();
+    }
+
+    /* =========================================================
+       نموذج الإدخال
+       ========================================================= */
+    function renderOptionInputs() {
+      const container = $('optionsContainer');
+      container.innerHTML = '';
+      formState.options.forEach((opt, idx) => {
+        const isCorrect = formState.correctIndex === idx;
+        const row = document.createElement('div');
+        row.className = 'p-3 rounded-xl border transition ' + (isCorrect ? 'border-emerald-400 bg-emerald-50/40' : 'border-slate-200 bg-slate-50/60');
+        row.innerHTML =
+          '<div class="flex items-center gap-2.5">' +
+            '<input type="radio" name="correctOption" ' + (isCorrect ? 'checked' : '') + ' onchange="setCorrectOption(' + idx + ')" class="w-4 h-4 accent-emerald-600 cursor-pointer shrink-0" title="تعيين كإجابة صحيحة" />' +
+            '<span class="w-6 h-6 rounded-lg bg-white border border-slate-200 text-xs font-extrabold flex items-center justify-center shrink-0">' + esc(optionLetters[idx]) + '</span>' +
+            '<input type="text" dir="auto" value="' + esc(opt.text) + '" placeholder="الخيار ' + esc(optionLetters[idx]) + ' (أو الصق صورة هنا)..." ' +
+              'oninput="updateOptionText(' + idx + ', this.value)" onpaste="handleBoxPaste(event, ' + idx + ')" ' +
+              'class="flex-1 bg-white px-3 py-1.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-indigo-500 min-w-0" />' +
+            '<label class="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-indigo-600 cursor-pointer shrink-0" title="إضافة صورة للخيار">' +
+              '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>' +
+              '<input type="file" accept="image/*" class="hidden" onchange="handleImageUpload(event, ' + idx + ')" />' +
+            '</label>' +
+          '</div>' +
+          (opt.img
+            ? '<div class="mt-2 mr-9 relative inline-block">' +
+                '<img src="' + esc(opt.img) + '" alt="صورة الخيار" class="max-h-24 rounded-lg border border-slate-200 bg-white cursor-zoom-in" onclick="openLightbox(this.src)" />' +
+                '<button type="button" onclick="removeImage(' + idx + ')" class="absolute -top-2 -right-2 bg-rose-500 text-white w-5 h-5 rounded-full text-xs font-bold" title="إزالة الصورة">×</button>' +
+              '</div>'
+            : '');
+        container.appendChild(row);
+      });
+    }
+
+    function setCorrectOption(idx) {
+      formState.correctIndex = idx;
+      renderOptionInputs();
+      updatePreview();
+    }
+
+    function updateOptionText(idx, value) {
+      formState.options[idx].text = value;
+      updatePreview();
+    }
+
+    function updatePreview() {
+      const category = $('cardCategory').value.trim() || 'عام';
+      const question = $('questionText').value.trim();
+
+      $('previewBadge').textContent = category;
+      $('previewQText').textContent = question || 'سيظهر نص السؤال هنا...';
+      setImg($('previewQImg'), formState.questionImg);
+
+      const prevOpts = $('previewOptions');
+      prevOpts.innerHTML = '';
+      formState.options.forEach((opt, idx) => {
+        const isCorrect = formState.correctIndex === idx;
+        const div = document.createElement('div');
+        div.className = 'p-2.5 rounded-xl border text-xs flex items-center gap-2.5 ' +
+          (isCorrect ? 'border-emerald-400 bg-emerald-50/70 font-bold text-emerald-900' : 'border-slate-200 bg-slate-50 text-slate-700');
+        div.innerHTML =
+          '<span class="w-5 h-5 rounded-md bg-white border border-slate-200 flex items-center justify-center font-bold shrink-0">' + esc(optionLetters[idx]) + '</span>' +
+          '<div class="flex-1 space-y-1 min-w-0">' +
+            '<div>' + (esc(opt.text) || '<span class="text-slate-400">الخيار ' + esc(optionLetters[idx]) + '</span>') + '</div>' +
+            (opt.img ? '<img src="' + esc(opt.img) + '" alt="" class="max-h-16 rounded border border-slate-200" />' : '') +
+          '</div>';
+        prevOpts.appendChild(div);
+      });
+    }
+
+    function saveCard() {
+      const questionText = $('questionText').value.trim();
+      if (!questionText && !formState.questionImg) {
+        toast('أدخل نص السؤال أو أرفق صورة له أولاً.', 'warn');
+        return;
+      }
+      const options = formState.options.map((o) => ({ text: (o.text || '').trim(), img: o.img || '' }));
+      if (!options.some((o) => o.text || o.img)) {
+        toast('أضف خياراً واحداً على الأقل.', 'warn');
+        return;
+      }
+
+      const card = {
+        id: editingCardId || newId(),
+        category: $('cardCategory').value.trim() || 'عام',
+        questionText,
+        questionImg: formState.questionImg,
+        options,
+        correctIndex: formState.correctIndex,
+        explanation: $('cardExplanation').value.trim()
+      };
+
+      const wasEditing = !!editingCardId;
+      if (wasEditing) {
+        const index = cards.findIndex((c) => c.id === editingCardId);
+        if (index !== -1) cards[index] = card;
+        else cards.unshift(card);
+      } else {
+        cards.unshift(card);
+      }
+
+      const saved = persistCards();
+      resetForm();
+      renderSavedCardsList();
+      updateBadges();
+      populateCategoryFilter(true);
+      invalidateSession();
+
+      toast(saved
+        ? (wasEditing ? 'تم تحديث البطاقة ✔' : 'تم حفظ البطاقة ✔')
+        : 'البطاقة أُضيفت في الصفحة فقط — تعذّر الحفظ في المتصفح', saved ? 'ok' : 'err');
+    }
+
+    function resetForm() {
+      editingCardId = null;
+      aiSourceDirty = false;
+      $('formTitle').textContent = 'بطاقة جديدة';
+      $('questionText').value = '';
+      $('cardExplanation').value = '';
+      $('cardCategory').value = '';
+      $('questionImgPreview').classList.add('hidden');
+      setImg($('questionImg'), '');
+      formState = {
+        questionImg: '',
+        options: [
+          { text: '', img: '' }, { text: '', img: '' }, { text: '', img: '' }, { text: '', img: '' }
+        ],
+        correctIndex: 0
+      };
+      renderOptionInputs();
+      updatePreview();
+    }
+
+    function editCard(id) {
+      const card = cards.find((c) => c.id === id);
+      if (!card) {
+        toast('لم أجد هذه البطاقة (ربما حُذفت).', 'warn');
+        return;
+      }
+      switchTab('create');
+      editingCardId = card.id;
+      $('formTitle').textContent = 'تعديل البطاقة';
+      $('cardCategory').value = card.category;
+      $('questionText').value = card.questionText;
+      $('cardExplanation').value = card.explanation || '';
+
+      formState = {
+        questionImg: card.questionImg || '',
+        options: card.options.map((o) => ({ text: o.text || '', img: o.img || '' })),
+        correctIndex: card.correctIndex
+      };
+
+      if (formState.questionImg) {
+        setImg($('questionImg'), formState.questionImg);
+        $('questionImgPreview').classList.remove('hidden');
+      } else {
+        setImg($('questionImg'), '');
+        $('questionImgPreview').classList.add('hidden');
+      }
+
+      renderOptionInputs();
+      updatePreview();
+      aiSourceDirty = false;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function deleteCard(id) {
+      const card = cards.find((c) => c.id === id);
+      if (!card) return;
+      if (!confirm('حذف هذه البطاقة نهائياً؟')) return;
+      cards = cards.filter((c) => c.id !== id);
+      persistCards();
+      renderSavedCardsList();
+      updateBadges();
+      populateCategoryFilter(true);
+      invalidateSession();
+    }
+
+    function clearAllCards() {
+      if (!cards.length) return;
+      if (!confirm('هل أنت متأكد من حذف جميع البطاقات المحفوظة؟ لا يمكن التراجع.')) return;
+      cards = [];
+      persistCards();
+      renderSavedCardsList();
+      updateBadges();
+      populateCategoryFilter(true);
+      invalidateSession();
+      toast('حُذفت جميع البطاقات');
+    }
+
+    function renderSavedCardsList() {
+      const list = $('savedCardsList');
+      $('savedListCount').textContent = cards.length;
+      if (!cards.length) {
+        list.innerHTML = '<p class="text-xs text-slate-400 text-center py-6">لا توجد بطاقات محفوظة بعد.</p>';
+        return;
+      }
+      list.innerHTML = cards.map((card) =>
+        '<div class="p-2.5 rounded-xl border border-slate-100 bg-slate-50/70 flex items-center justify-between gap-2">' +
+          '<div class="min-w-0 flex-1">' +
+            '<span class="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">' + esc(card.category) + '</span>' +
+            '<p class="text-xs font-bold text-slate-800 truncate mt-1">' + (esc(card.questionText) || 'سؤال مصوّر') + '</p>' +
+          '</div>' +
+          '<div class="flex items-center gap-1 shrink-0">' +
+            '<button type="button" data-action="edit" data-id="' + esc(card.id) + '" class="px-2 py-1 text-[11px] font-bold text-slate-600 hover:bg-white rounded-lg border border-transparent hover:border-slate-200">تعديل</button>' +
+            '<button type="button" data-action="delete" data-id="' + esc(card.id) + '" class="px-2 py-1 text-[11px] font-bold text-rose-600 hover:bg-rose-50 rounded-lg">حذف</button>' +
+          '</div>' +
+        '</div>').join('');
+    }
+
+    function onSavedListClick(event) {
+      const btn = event.target.closest('button[data-action]');
+      if (!btn) return;
+      const id = btn.getAttribute('data-id');
+      if (btn.getAttribute('data-action') === 'edit') editCard(id);
+      else deleteCard(id);
+    }
+
+    function updateBadges() {
+      $('cardsCountBadge').textContent = cards.length;
+      updateStorageMeter();
+    }
+
+    /* =========================================================
+       التبويبات
+       ========================================================= */
+    function switchTab(tab) {
+      const createView = $('createView');
+      const studyView = $('studyView');
+      const tabCreate = $('tabCreate');
+      const tabStudy = $('tabStudy');
+
+      if (tab === 'create') {
+        createView.classList.remove('hidden');
+        studyView.classList.add('hidden');
+        tabCreate.className = 'px-4 py-1.5 rounded-lg text-sm font-bold bg-white text-indigo-600 shadow-sm transition';
+        tabStudy.className = 'px-4 py-1.5 rounded-lg text-sm font-bold text-slate-600 hover:text-slate-900 transition';
+      } else {
+        createView.classList.add('hidden');
+        studyView.classList.remove('hidden');
+        tabStudy.className = 'px-4 py-1.5 rounded-lg text-sm font-bold bg-white text-indigo-600 shadow-sm transition';
+        tabCreate.className = 'px-4 py-1.5 rounded-lg text-sm font-bold text-slate-600 hover:text-slate-900 transition';
+        populateCategoryFilter(true);
+        ensureSession();
+      }
+    }
+
+    /* يحافظ على التصنيف المختار عند إعادة بناء القائمة */
+    function populateCategoryFilter(preserve) {
+      const select = $('studyCategoryFilter');
+      const previous = preserve ? select.value : 'all';
+      const categories = [];
+      cards.forEach((c) => {
+        if (c.category && categories.indexOf(c.category) === -1) categories.push(c.category);
+      });
+      categories.sort((a, b) => a.localeCompare(b, 'ar'));
+
+      select.innerHTML = '<option value="all">جميع التصنيفات (' + cards.length + ')</option>' +
+        categories.map((cat) => '<option value="' + esc(cat) + '">' + esc(cat) + '</option>').join('');
+
+      if (previous !== 'all') {
+        const stillThere = categories.some((cat) => cat === previous);
+        select.value = stillThere ? previous : 'all';
+      }
+    }
+
+    /* =========================================================
+       جلسة المذاكرة
+       ========================================================= */
+    function invalidateSession() {
+      session = { list: [], answers: new Map(), idx: 0, filter: $('studyCategoryFilter') ? $('studyCategoryFilter').value : 'all', finished: false };
+    }
+
+    function startStudySession() {
+      const filter = $('studyCategoryFilter').value;
+      const list = filter === 'all' ? cards.slice() : cards.filter((c) => c.category === filter);
+      session = { list, answers: new Map(), idx: 0, filter, finished: false };
+      updateStudyStats();
+      renderStudyCard();
+    }
+
+    /* لا تعيد تشغيل الجلسة عند مجرد التنقل بين التبويبات */
+    function ensureSession() {
+      const filter = $('studyCategoryFilter').value;
+      const expected = filter === 'all' ? cards.length : cards.filter((c) => c.category === filter).length;
+      const idsExist = session.list.every((c) => cards.some((x) => x.id === c.id));
+      const valid = session.list.length > 0 && session.filter === filter && session.list.length === expected && idsExist;
+      if (valid) renderStudyCard();
+      else startStudySession();
+    }
+
+    function shuffleStudyCards() {
+      if (!session.list.length) return;
+      for (let i = session.list.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const tmp = session.list[i];
+        session.list[i] = session.list[j];
+        session.list[j] = tmp;
+      }
+      session.idx = 0;
+      session.finished = false;
+      renderStudyCard();
+      toast('تم خلط البطاقات — النقاط محفوظة');
+    }
+
+    function countAnswers() {
+      let correct = 0;
+      let wrong = 0;
+      session.answers.forEach((answer) => { if (answer.correct) correct++; else wrong++; });
+      return { correct, wrong };
+    }
+
+    function updateStudyStats() {
+      const tally = countAnswers();
+      $('scoreCorrect').textContent = tally.correct;
+      $('scoreWrong').textContent = tally.wrong;
+    }
+
+    function renderStudyCard() {
+      const emptyState = $('studyEmptyState');
+      const activeContent = $('studyActiveContent');
+      const navBar = $('studyNavBar');
+      const summary = $('studySummary');
+
+      if (!session.list.length) {
+        emptyState.classList.remove('hidden');
+        activeContent.classList.add('hidden');
+        navBar.classList.add('hidden');
+        summary.classList.add('hidden');
+        $('studyProgress').textContent = '0 / 0';
+        updateStudyStats();
+        return;
+      }
+
+      emptyState.classList.add('hidden');
+
+      if (session.finished) {
+        activeContent.classList.add('hidden');
+        navBar.classList.add('hidden');
+        summary.classList.remove('hidden');
+        $('studyProgress').textContent = session.list.length + ' / ' + session.list.length;
+        renderSummary();
+        return;
+      }
+
+      summary.classList.add('hidden');
+      activeContent.classList.remove('hidden');
+      navBar.classList.remove('hidden');
+
+      const card = session.list[session.idx];
+      $('studyProgress').textContent = (session.idx + 1) + ' / ' + session.list.length;
+      $('studyCardCat').textContent = card.category || 'عام';
+      $('studyQText').textContent = card.questionText || 'سؤال مصوّر';
+      setImg($('studyQImg'), card.questionImg);
+
+      $('studyExplanationBox').classList.add('hidden');
+
+      const grid = $('studyOptionsGrid');
+      grid.innerHTML = '';
+      card.options.forEach((opt, idx) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.id = 'studyOpt_' + idx;
+        btn.className = 'p-3.5 rounded-xl border-2 border-slate-200 hover:border-indigo-400 bg-slate-50/50 hover:bg-indigo-50/30 text-right transition flex items-start gap-3';
+        btn.innerHTML =
+          '<span class="w-7 h-7 rounded-lg bg-white border border-slate-200 font-extrabold text-xs flex items-center justify-center shrink-0 mt-0.5">' + esc(optionLetters[idx] || '') + '</span>' +
+          '<div class="flex-1 space-y-2 min-w-0">' +
+            '<span class="font-bold text-sm text-slate-800 block">' + (esc(opt.text) || '<span class="text-slate-400">—</span>') + '</span>' +
+            (opt.img ? '<img src="' + esc(opt.img) + '" alt="صورة الخيار" data-zoom="1" class="max-h-28 rounded-lg border border-slate-200 cursor-zoom-in" />' : '') +
+          '</div>';
+        btn.addEventListener('click', (event) => {
+          const zoomTarget = event.target.closest('img[data-zoom]');
+          if (zoomTarget) { openLightbox(zoomTarget.src); return; }
+          selectStudyAnswer(idx);
+        });
+        grid.appendChild(btn);
+      });
+
+      const answer = session.answers.get(card.id);
+      if (answer) paintAnswered(card, answer.selected);
+
+      $('btnPrevCard').disabled = session.idx === 0;
+      $('btnNextCard').textContent = session.idx === session.list.length - 1 ? 'إنهاء الجلسة' : 'السؤال التالي';
+    }
+
+    function paintAnswered(card, selectedIdx) {
+      card.options.forEach((_, idx) => {
+        const btn = $('studyOpt_' + idx);
+        if (!btn) return;
+        btn.disabled = true;
+        const base = 'p-3.5 rounded-xl border-2 text-right flex items-start gap-3 ';
+        if (idx === card.correctIndex) btn.className = base + 'border-emerald-500 bg-emerald-50';
+        else if (idx === selectedIdx) btn.className = base + 'border-rose-500 bg-rose-50';
+        else btn.className = base + 'border-slate-100 bg-slate-50/40 opacity-60';
+      });
+
+      if (card.explanation) {
+        $('studyExplanationText').textContent = card.explanation;
+        $('studyExplanationBox').classList.remove('hidden');
+      }
+    }
+
+    function selectStudyAnswer(selectedIdx) {
+      const card = session.list[session.idx];
+      if (!card || session.finished) return;
+      if (session.answers.has(card.id)) return; // لا احتساب مزدوج أبداً
+
+      session.answers.set(card.id, { selected: selectedIdx, correct: selectedIdx === card.correctIndex });
+      updateStudyStats();
+      paintAnswered(card, selectedIdx);
+    }
+
+    function nextStudyCard() {
+      if (!session.list.length) return;
+      if (session.idx < session.list.length - 1) {
+        session.idx++;
+        renderStudyCard();
+      } else {
+        session.finished = true;
+        renderStudyCard();
+      }
+    }
+
+    function prevStudyCard() {
+      if (!session.list.length) return;
+      if (session.finished) {
+        session.finished = false;
+        session.idx = session.list.length - 1;
+        renderStudyCard();
+        return;
+      }
+      if (session.idx > 0) {
+        session.idx--;
+        renderStudyCard();
+      }
+    }
+
+    function renderSummary() {
+      const tally = countAnswers();
+      const total = session.list.length;
+      $('summaryTotal').textContent = total;
+      $('summaryCorrect').textContent = tally.correct;
+      $('summaryWrong').textContent = tally.wrong;
+      $('summaryNote').textContent = 'أجبت عن ' + session.answers.size + ' من ' + total + ' سؤالاً.' +
+        (session.answers.size < total ? ' يمكنك متابعة بقية البطاقات بالرجوع بالزر «السابق».' : '');
+      $('btnStudyWrong').classList.toggle('hidden', tally.wrong === 0);
+    }
+
+    function studyWrongOnly() {
+      const wrongIds = new Set();
+      session.answers.forEach((answer, id) => { if (!answer.correct) wrongIds.add(id); });
+      const list = session.list.filter((c) => wrongIds.has(c.id));
+      if (!list.length) {
+        toast('لا توجد أخطاء — نتيجة كاملة!', 'ok');
+        return;
+      }
+      session = { list, answers: new Map(), idx: 0, filter: session.filter, finished: false };
+      updateStudyStats();
+      renderStudyCard();
+    }
+
+    function editCurrentStudyCard() {
+      const card = session.list[session.idx];
+      if (card) editCard(card.id);
+    }
+
+    /* =========================================================
+       التصدير والاستيراد
+       ========================================================= */
+    function exportCards() {
+      if (!cards.length) {
+        toast('لا توجد بطاقات لتصديرها.', 'warn');
+        return;
+      }
+      const payload = { version: 3, exportedAt: new Date().toISOString(), count: cards.length, cards };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'flashcards_backup_' + new Date().toISOString().slice(0, 10) + '.json';
+      a.rel = 'noopener';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+      toast('تم تجهيز ملف النسخة الاحتياطية');
+    }
+
+    function importCards(event) {
+      const input = event.target;
+      const file = input.files && input.files[0];
+      input.value = '';
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onerror = () => toast('تعذّر قراءة الملف.', 'err');
+      reader.onload = () => {
+        let parsed = null;
+        try {
+          parsed = JSON.parse(String(reader.result || ''));
+        } catch (err) {
+          toast('الملف ليس JSON صالحاً.', 'err');
+          return;
+        }
+
+        const incoming = Array.isArray(parsed)
+          ? parsed
+          : (parsed && Array.isArray(parsed.cards) ? parsed.cards : null);
+        if (!incoming) {
+          toast('صيغة غير متوقعة: الملف يجب أن يحتوي مصفوفة بطاقات.', 'err');
+          return;
+        }
+
+        const existingIds = new Set(cards.map((c) => c.id));
+        const added = [];
+        let skipped = 0;
+        incoming.forEach((raw) => {
+          const card = normalizeCard(raw);
+          if (!card) { skipped++; return; }
+          if (existingIds.has(card.id)) card.id = newId();
+          existingIds.add(card.id);
+          added.push(card);
+        });
+
+        if (!added.length) {
+          toast('لم تُضف أي بطاقة — الملف لا يحتوي بطاقات صالحة.', 'warn');
+          return;
+        }
+
+        cards = added.concat(cards);
+        const saved = persistCards();
+        renderSavedCardsList();
+        updateBadges();
+        populateCategoryFilter(true);
+        invalidateSession();
+
+        toast('تم استيراد ' + added.length + ' بطاقة' +
+          (skipped ? ' وتجاهل ' + skipped + ' غير صالحة' : '') +
+          (saved ? '' : ' — لكن التخزين ممتلئ!'), saved ? 'ok' : 'err');
+      };
+      reader.readAsText(file);
+    }
+
+    /* =========================================================
+       نافذة تكبير الصور
+       ========================================================= */
+    function openLightbox(src) {
+      if (!src) return;
+      $('lightboxImg').src = src;
+      $('lightboxModal').classList.remove('hidden');
+      $('lightboxModal').classList.add('flex');
+    }
+    function closeLightbox() {
+      $('lightboxModal').classList.add('hidden');
+      $('lightboxModal').classList.remove('flex');
+    }
+
+    /* =========================================================
+       OCR: قراءة الصورة وتقسيم السؤال
+       ========================================================= */
+    function showOcrStatus(text) {
+      clearTimeout(ocrHideTimer);
+      $('ocrStatusText').textContent = text;
+      $('ocrStatus').classList.remove('hidden');
+      $('ocrStatus').classList.add('flex');
+    }
+    function hideOcrStatus() {
+      clearTimeout(ocrHideTimer);
+      ocrHideTimer = setTimeout(() => {
+        $('ocrStatus').classList.add('hidden');
+        $('ocrStatus').classList.remove('flex');
+      }, 3500);
+    }
+
+    async function handleSmartScreenshotUpload(event) {
+      const input = event.target;
+      const file = input.files && input.files[0];
+      input.value = '';
+      if (file) await processSmartScreenshot(file);
+    }
+
+    /* يتعرّف على علامات الخيارات العربية والإنجليزية والأرقام العربية-الهندية
+       مثل: أ)  (ب)  جـ -  د.  1.  ٢)  ۳)  A)  b-  */
+    const MARKER_RE = /^\s*[\(\[]?\s*(?:[أاإآبجدهوزحطيكلمنسعفصقرشتثخذضظغ]|[a-dA-D]|[1-9]|[٠-٩]|[۰-۹])\u0640*\s*[\)\]\}\-–—.:،]\s*/;
+
+    /* يعيد النص العربي إلى شكل موحّد للمقارنة فقط (لا يغيّر ما يُحفظ) */
+    function normalizeArabicForMatch(text) {
+      return String(text || '')
+        .replace(/[\u064B-\u0652\u0670\u0640]/g, '')          /* التشكيل والتطويل */
+        .replace(/[\u0660-\u0669]/g, (d) => String(d.charCodeAt(0) - 0x0660)) /* ٠-٩ */
+        .replace(/[\u06F0-\u06F9]/g, (d) => String(d.charCodeAt(0) - 0x06F0)) /* ۰-۹ */
+        .replace(/[أإآ]/g, 'ا');
+    }
+
+    /* يفصل السؤال عن الخيارات اعتماداً على علامات الخيارات أو آخر أربعة أسطر */
+    function parseQuestionText(rawText) {
+      const lines = String(rawText || '')
+        .replace(/\r/g, '')
+        .split('\n')
+        .map((line) => line.replace(/[\u200b-\u200f\u202a-\u202e]/g, '').trim())
+        .map((line) => line.replace(/^[\-*•○●◦◉▪]+\s*/, '').replace(/\s*[\-*•○●◦◉▪]+$/, '').trim())
+        .filter((line) => line.length > 0);
+
+      const marked = [];
+      lines.forEach((line, index) => {
+        if (marked.length < 4 && MARKER_RE.test(line)) marked.push(index);
+      });
+
+      let question = '';
+      let options = [];
+
+      if (marked.length >= 2 && marked[0] !== undefined) {
+        question = lines.slice(0, marked[0]).join(' ').trim();
+        for (let k = 0; k < marked.length && options.length < 4; k++) {
+          const from = marked[k];
+          const to = (k + 1 < marked.length) ? marked[k + 1] : lines.length;
+          const body = lines.slice(from, to).join(' ').trim();
+          options.push(body.replace(MARKER_RE, '').trim());
+        }
+      } else if (lines.length >= 5) {
+        question = lines.slice(0, lines.length - 4).join(' ').trim();
+        options = lines.slice(-4);
+      } else if (lines.length === 1) {
+        question = lines[0];
+      } else {
+        question = lines[0];
+        options = lines.slice(1);
+      }
+
+      while (options.length < 4) options.push('');
+      return { question, options: options.slice(0, 4) };
+    }
+
+    function applyParsedQuestion(parsed) {
+      if (parsed.question) $('questionText').value = parsed.question;
+      formState.options = [0, 1, 2, 3].map((i) => ({ text: (parsed.options[i] || '').trim(), img: '' }));
+      renderOptionInputs();
+      updatePreview();
+    }
+
+        /* =========================================================
+       تحسين الصورة قبل قراءة النص العربي
+       التكبير + الرمادي + الثنائية (Otsu) يرفعان دقة Tesseract كثيراً
+       ========================================================= */
+    function preprocessForOcr(file) {
+      return new Promise((resolve, reject) => {
+        if (!file || !file.type || file.type.indexOf('image/') !== 0) {
+          reject(new Error('الملف ليس صورة'));
+          return;
+        }
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+          try {
+            let w = img.naturalWidth || img.width;
+            let h = img.naturalHeight || img.height;
+            if (!w || !h) throw new Error('أبعاد الصورة غير معروفة');
+
+            /* نكبّر الصور الصغيرة: الحروف العربية الصغيرة لا يقرأها المحرك */
+            const longest = Math.max(w, h);
+            const scale = longest < 1600 ? Math.min(3, 2200 / longest) : Math.min(1, 2600 / longest);
+            w = Math.max(1, Math.round(w * scale));
+            h = Math.max(1, Math.round(h * scale));
+
+            const canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) throw new Error('المتصفح لا يدعم معالجة الصور');
+
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, w, h);
+            ctx.imageSmoothingEnabled = true;
+            ctx.drawImage(img, 0, 0, w, h);
+
+            const frame = ctx.getImageData(0, 0, w, h);
+            const px = frame.data;
+            const total = w * h;
+
+            const hist = new Array(256).fill(0);
+            let sum = 0;
+            for (let i = 0; i < px.length; i += 4) {
+              const g = (px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114) | 0;
+              px[i] = px[i + 1] = px[i + 2] = g;
+              hist[g]++;
+              sum += g;
+            }
+
+            /* حدّ أقصى للتباين بطريقة Otsu */
+            let sumB = 0;
+            let weightB = 0;
+            let best = -1;
+            let threshold = 128;
+            for (let t = 0; t < 256; t++) {
+              weightB += hist[t];
+              if (!weightB) continue;
+              const weightF = total - weightB;
+              if (!weightF) break;
+              sumB += t * hist[t];
+              const meanB = sumB / weightB;
+              const meanF = (sum - sumB) / weightF;
+              const between = weightB * weightF * (meanB - meanF) * (meanB - meanF);
+              if (between > best) {
+                best = between;
+                threshold = t;
+              }
+            }
+
+            let black = 0;
+            for (let i = 0; i < px.length; i += 4) {
+              const v = px[i] > threshold ? 255 : 0;
+              if (v === 0) black++;
+              px[i] = px[i + 1] = px[i + 2] = v;
+              px[i + 3] = 255;
+            }
+
+            /* لقطات الوضع الليلي: خلفية سوداء ونص أبيض → نقلبها */
+            if (black > total * 0.6) {
+              for (let i = 0; i < px.length; i += 4) {
+                const v = 255 - px[i];
+                px[i] = px[i + 1] = px[i + 2] = v;
+              }
+            }
+
+            ctx.putImageData(frame, 0, 0);
+            URL.revokeObjectURL(url);
+            resolve(canvas);
+          } catch (err) {
+            URL.revokeObjectURL(url);
+            reject(err);
+          }
+        };
+        img.onerror = () => {
+          URL.revokeObjectURL(url);
+          reject(new Error('تعذّر قراءة الصورة'));
+        };
+        img.src = url;
+      });
+    }
+
+    async function processSmartScreenshot(file) {
+      if (ocrBusy) {
+        toast('التحليل جارٍ بالفعل، انتظر قليلاً.', 'warn');
+        return;
+      }
+      if (typeof Tesseract === 'undefined') {
+        try {
+          const dataUrl = await compressImage(file);
+          applyImageToTarget('question', dataUrl);
+        } catch (e) { /* تجاهل */ }
+        toast('تعذّر تحميل محرك قراءة النص (تحقق من الإنترنت). أُرفقت الصورة كسؤال.', 'err');
+        return;
+      }
+
+      ocrBusy = true;
+      showOcrStatus('جاري تحسين الصورة وقراءة النص العربي منها...');
+
+      /* نحتفظ بنسخة عالية الدقة واللون لإرسالها إلى المساعد الذكي لاحقاً */
+      try {
+        lastSourceImage = await compressImage(file, { maxSide: 2000, quality: 0.92, maxChars: 6000000 });
+      } catch (e) {
+        lastSourceImage = '';
+      }
+
+      try {
+        /* الصورة المعالجة للقراءة، والأصلية كاحتياط */
+        let ocrInput = file;
+        try {
+          ocrInput = await preprocessForOcr(file);
+        } catch (e) {
+          ocrInput = file;
+        }
+
+        let result = null;
+        try {
+          result = await Tesseract.recognize(ocrInput, 'ara+eng', {
+            tessedit_pageseg_mode: '6',
+            preserve_interword_spaces: '1',
+            user_defined_dpi: '300'
+          });
+        } catch (paramErr) {
+          result = await Tesseract.recognize(ocrInput, 'ara+eng');
+        }
+
+        lastRawOcrText = String((result && result.data && result.data.text) || '');
+        aiSourceDirty = false;
+        $('aiSourceBox').value = lastRawOcrText.trim();
+        const confidence = Math.max(0, Math.min(100, Math.round(Number(result && result.data && result.data.confidence) || 0)));
+
+        const parsed = parseQuestionText(lastRawOcrText);
+        const foundOptions = parsed.options.filter((o) => o).length;
+
+        if (foundOptions >= 2) {
+          applyParsedQuestion(parsed);
+          if (confidence && confidence < 55) {
+            toast('استُخرج النص لكن دقة القراءة منخفضة (' + confidence + '%). راجع الكلمات، أو استخدم «تحليل وحل بالـ AI» فدقته أعلى.', 'warn');
+          } else {
+            toast('تم استخراج السؤال والخيارات' + (confidence ? ' — دقة القراءة ' + confidence + '%' : '') + ' ✔', 'ok');
+          }
+        } else {
+          const dataUrl = await compressImage(file);
+          applyImageToTarget('question', dataUrl);
+          toast('لم أستطع فصل الخيارات من الصورة، فأُرفقت كصورة سؤال. جرّب زر «تحليل وحل بالـ AI».', 'warn');
+        }
+      } catch (err) {
+        toast('فشل استخراج النص: ' + (err && err.message ? err.message : 'خطأ غير معروف'), 'err');
+        try {
+          const dataUrl = await compressImage(file);
+          applyImageToTarget('question', dataUrl);
+        } catch (e) { /* تجاهل */ }
+      } finally {
+        ocrBusy = false;
+        hideOcrStatus();
+      }
+    }
+
+    /* =========================================================
+       مساعد الذكاء الاصطناعي: Gemini / ChatGPT / DeepSeek
+       ========================================================= */
+    const AI_PROVIDERS = {
+      gemini: {
+        name: 'Google Gemini',
+        short: 'Gemini',
+        defaultModel: 'gemini-2.5-flash',
+        models: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'],
+        keyUrl: 'https://aistudio.google.com/app/apikey',
+        keyHint: 'مفتاح من Google AI Studio',
+        supportsImage: true
+      },
+      openai: {
+        name: 'ChatGPT (OpenAI)',
+        short: 'ChatGPT',
+        defaultModel: 'gpt-4o-mini',
+        models: ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'o4-mini'],
+        keyUrl: 'https://platform.openai.com/api-keys',
+        keyHint: 'مفتاح من platform.openai.com',
+        supportsImage: true
+      },
+      deepseek: {
+        name: 'DeepSeek',
+        short: 'DeepSeek',
+        defaultModel: 'deepseek-chat',
+        models: ['deepseek-chat', 'deepseek-reasoner'],
+        keyUrl: 'https://platform.deepseek.com/api_keys',
+        keyHint: 'مفتاح من platform.deepseek.com',
+        supportsImage: false
+      }
+    };
+
+    let aiConfig = { provider: 'gemini', models: {}, keys: {} };
+    let aiBusy = false;
+
+    function loadAiConfig() {
+      let parsed = null;
+      try { parsed = JSON.parse(localStorage.getItem(AI_STORAGE_KEY) || 'null'); } catch (e) { parsed = null; }
+      const config = { provider: 'gemini', models: {}, keys: {} };
+      if (parsed && typeof parsed === 'object') {
+        if (AI_PROVIDERS[parsed.provider]) config.provider = parsed.provider;
+        if (parsed.models && typeof parsed.models === 'object') {
+          Object.keys(AI_PROVIDERS).forEach((p) => {
+            if (typeof parsed.models[p] === 'string' && parsed.models[p].trim()) config.models[p] = parsed.models[p].trim();
+          });
+        }
+        if (parsed.keys && typeof parsed.keys === 'object') {
+          Object.keys(AI_PROVIDERS).forEach((p) => {
+            if (typeof parsed.keys[p] === 'string' && parsed.keys[p].trim()) config.keys[p] = parsed.keys[p].trim();
+          });
+        }
+      }
+      return config;
+    }
+
+    function saveAiConfig() {
+      try { localStorage.setItem(AI_STORAGE_KEY, JSON.stringify(aiConfig)); }
+      catch (e) { toast('تعذّر حفظ إعدادات المساعد (التخزين ممتلئ).', 'warn'); }
+    }
+
+    function currentModel(provider) {
+      return (aiConfig.models[provider] || AI_PROVIDERS[provider].defaultModel).trim();
+    }
+
+    function syncAiUi() {
+      const provider = aiConfig.provider;
+      const meta = AI_PROVIDERS[provider];
+
+      const badge = $('aiProviderBadge');
+      if (badge) badge.textContent = meta.short;
+
+      const buttons = document.querySelectorAll('#aiProviderGrid [data-provider]');
+      Array.prototype.forEach.call(buttons, (btn) => {
+        const active = btn.getAttribute('data-provider') === provider;
+        btn.classList.toggle('active', active);
+        btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+      });
+
+      const modelInput = $('aiModelInput');
+      if (modelInput) modelInput.value = currentModel(provider);
+
+      const datalist = $('aiModelOptions');
+      if (datalist) {
+        datalist.innerHTML = meta.models.map((m) => '<option value="' + esc(m) + '"></option>').join('');
+      }
+
+      const keyInput = $('aiKeyInput');
+      if (keyInput) keyInput.value = aiConfig.keys[provider] || '';
+
+      const hint = $('aiKeyHint');
+      if (hint) hint.textContent = meta.keyHint;
+
+      const link = $('aiDocLink');
+      if (link) link.href = meta.keyUrl;
+
+      const thumb = $('aiImageThumb');
+      if (thumb) {
+        const src = lastSourceImage || formState.questionImg;
+        if (src) {
+          thumb.src = src;
+          thumb.classList.remove('hidden');
+        } else {
+          thumb.removeAttribute('src');
+          thumb.classList.add('hidden');
+        }
+      }
+
+      const useImage = $('aiUseImage');
+      if (useImage) {
+        useImage.disabled = !meta.supportsImage;
+        useImage.title = meta.supportsImage
+          ? 'إرسال صورة السؤال مع النص — يعطي أدق نتيجة للنص العربي'
+          : meta.name + ' لا يدعم قراءة الصور في هذه الواجهة، أرسل النص فقط';
+      }
+    }
+
+    function setProvider(provider) {
+      if (!AI_PROVIDERS[provider]) return;
+      aiConfig.provider = provider;
+      saveAiConfig();
+      syncAiUi();
+      setAiStatus('', 'info');
+    }
+
+    function onAiModelChange(value) {
+      const v = String(value || '').trim();
+      if (v) aiConfig.models[aiConfig.provider] = v;
+      else delete aiConfig.models[aiConfig.provider];
+      saveAiConfig();
+    }
+
+    function onAiKeyChange(value) {
+      const v = String(value || '').trim();
+      if (v) aiConfig.keys[aiConfig.provider] = v;
+      else delete aiConfig.keys[aiConfig.provider];
+      saveAiConfig();
+    }
+
+    function clearAiKey() {
+      delete aiConfig.keys[aiConfig.provider];
+      saveAiConfig();
+      syncAiUi();
+      setAiStatus('حُذف المفتاح المحفوظ لهذا المزوّد.', 'warn');
+    }
+
+    function openAiModal() {
+      const box = $('aiSourceBox');
+      if (box && !aiSourceDirty) box.value = defaultSourceText();
+      $('aiModal').classList.remove('hidden');
+      syncAiUi();
+    }
+    function closeAiModal() {
+      $('aiModal').classList.add('hidden');
+    }
+
+    function setAiStatus(message, kind) {
+      const box = $('aiStatus');
+      if (!box) return;
+      if (!message) {
+        box.classList.add('hidden');
+        box.textContent = '';
+        return;
+      }
+      const palette = {
+        ok: 'bg-emerald-50 border border-emerald-200 text-emerald-800',
+        err: 'bg-rose-50 border border-rose-200 text-rose-800',
+        warn: 'bg-amber-50 border border-amber-200 text-amber-800',
+        info: 'bg-indigo-50 border border-indigo-200 text-indigo-800'
+      };
+      box.className = 'text-xs font-bold rounded-xl px-3 py-2 leading-relaxed ' + (palette[kind] || palette.info);
+      box.textContent = message;
+    }
+
+    /* النص الافتراضي للمصدر: حقول النموذج إن وُجدت، وإلا النص الخام من الصورة */
+    function defaultSourceText() {
+      const parts = [];
+      const question = $('questionText').value.trim();
+      if (question) parts.push(question);
+      formState.options.forEach((o) => {
+        const t = (o.text || '').trim();
+        if (t) parts.push(t);
+      });
+      if (parts.length) return parts.join('\n');
+      return lastRawOcrText.trim();
+    }
+
+    function refillAiSource() {
+      $('aiSourceBox').value = defaultSourceText();
+      aiSourceDirty = false;
+      setAiStatus('حُدّث نص المصدر من النموذج. عدّله إن كان مشوّشاً ثم اضغط التحليل.', 'ok');
+    }
+
+    /* المصدر النهائي: ما عدّله المستخدم في المربع، وإلا المصدر الحالي للنموذج.
+       لا نستخدم المربع إن لم يُعدّل حتى لا يبقى نص قديم من لقطة سابقة. */
+    function sourceText() {
+      const box = $('aiSourceBox');
+      const typed = (box && aiSourceDirty) ? box.value.trim() : '';
+      return typed || defaultSourceText();
+    }
+
+    function sourceLines() {
+      return sourceText()
+        .replace(/\r/g, '')
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0)
+        .slice(0, 150);
+    }
+
+    /* البرومبت يطلب أرقام الأسطر لا إعادة كتابة الكلمات — حتى لا يغيّر المساعد النص */
+    function buildPrompt() {
+      const lines = sourceLines();
+      lastAiLines = lines;
+      const numbered = lines.length
+        ? lines.map((line, i) => i + ': ' + line).join('\n')
+        : '(لا يوجد نص — اعتمد على الصورة المرفقة فقط)';
+
+      return [
+        'مهمتك: نسخ وتقسيم نص سؤال اختيار من متعدد. أنت ناسخ حرفي، لست كاتباً ولا مصححاً لغوياً.',
+        '',
+        'قواعد إلزامية:',
+        '1) انسخ الكلمات كما هي بالضبط. ممنوع إعادة الصياغة، وممنوع تصحيح الإملاء، وممنوع الاختصار أو الترجمة أو إضافة كلمات من عندك.',
+        '2) إن أُرفقت صورة فالصورة هي المرجع الأول؛ إن اختلف النص المرقّم عن الصورة فاتبع الصورة.',
+        '3) لا تدمج سطرين، ولا تحذف سطراً، ولا تعيد ترتيب الخيارات.',
+        '4) عبّر عن السؤال والخيارات بأرقام الأسطر الموجودة على يسار النص المرقّم، ولا تُعد كتابة النص بنفسك.',
+        '5) إن كانت كلمة غير مقروءة، اتركها كما وردت بدل تخمين كلمة جديدة.',
+        '',
+        'أعد JSON فقط، بدون Markdown وبدون أي نص خارج الكائن:',
+        '{"questionLines":[0,1],"optionsLines":[[2],[3],[4],[5]],"questionText":"","optionsText":["","","",""],"correctIndex":0,"explanation":"...","category":"..."}',
+        '',
+        'شرح الحقول:',
+        '- questionLines: أرقام أسطر السؤال.',
+        '- optionsLines: أربع مصفوفات بالترتيب، كل واحدة تحتوي أرقام أسطر خيار واحد فقط.',
+        '- questionText و optionsText: تُملأ فقط بالكلمات التي تراها في الصورة ولم تظهر في النص المرقّم. اتركها "" في الحالة العادية.',
+        '- correctIndex: رقم الخيار الصحيح من 0 إلى 3.',
+        '- explanation: جملة أو جملتان بالعربية تشرح سبب صحة الإجابة.',
+        '',
+        'النص المرقّم:',
+        '"""',
+        numbered,
+        '"""'
+      ].join('\n');
+    }
+
+    function base64OfDataUrl(dataUrl) {
+      const index = String(dataUrl || '').indexOf(',');
+      return index === -1 ? '' : String(dataUrl).slice(index + 1);
+    }
+
+    async function apiError(res) {
+      let detail = '';
+      try {
+        const json = await res.json();
+        detail = (json && json.error && (json.error.message || json.error.status)) || JSON.stringify(json).slice(0, 300);
+      } catch (e) {
+        try { detail = (await res.text()).slice(0, 300); } catch (e2) { detail = ''; }
+      }
+      const map = {
+        400: 'طلب غير صالح (غالباً اسم الموديل غير صحيح)',
+        401: 'مفتاح API غير صحيح',
+        403: 'المفتاح لا يملك صلاحية لهذا الموديل',
+        404: 'الموديل أو المسار غير موجود',
+        413: 'الطلب أكبر من المسموح',
+        429: 'تجاوزت حد الاستخدام أو نفدت الحصة',
+        500: 'خطأ في خادم المزوّد',
+        503: 'الخدمة غير متاحة مؤقتاً'
+      };
+      return '(' + res.status + ') ' + (map[res.status] || 'خطأ من المزوّد') + (detail ? ' — ' + detail : '');
+    }
+
+    async function callGemini(key, model, prompt, imageDataUrl) {
+      const parts = [{ text: prompt }];
+      if (imageDataUrl) parts.push({ inline_data: { mime_type: 'image/jpeg', data: base64OfDataUrl(imageDataUrl) } });
+
+      const url = 'https://generativelanguage.googleapis.com/v1beta/models/' +
+        encodeURIComponent(model) + ':generateContent?key=' + encodeURIComponent(key);
+
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts }],
+          generationConfig: { temperature: 0.2, responseMimeType: 'application/json' }
+        })
+      });
+
+      if (!res.ok) throw new Error(await apiError(res));
+      const data = await res.json();
+      const candidate = data && data.candidates && data.candidates[0];
+      const text = candidate && candidate.content && Array.isArray(candidate.content.parts)
+        ? candidate.content.parts.map((p) => p.text || '').join('')
+        : '';
+      if (!text) throw new Error('رد فارغ من Gemini' + (data && data.promptFeedback ? ' — ' + JSON.stringify(data.promptFeedback).slice(0, 200) : ''));
+      return text;
+    }
+
+    async function callOpenAiStyle(provider, key, model, prompt, imageDataUrl) {
+      const endpoint = provider === 'deepseek'
+        ? 'https://api.deepseek.com/chat/completions'
+        : 'https://api.openai.com/v1/chat/completions';
+
+      let content = prompt;
+      if (imageDataUrl && AI_PROVIDERS[provider].supportsImage) {
+        content = [
+          { type: 'text', text: prompt },
+          { type: 'image_url', image_url: { url: imageDataUrl } }
+        ];
+      }
+
+      const body = { model, messages: [{ role: 'user', content }] };
+      if (provider === 'deepseek') body.temperature = 0.2;
+      if (!(provider === 'deepseek' && /reasoner/i.test(model))) body.response_format = { type: 'json_object' };
+
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+        body: JSON.stringify(body)
+      });
+
+      if (!res.ok) throw new Error(await apiError(res));
+      const data = await res.json();
+      const message = data && data.choices && data.choices[0] && data.choices[0].message;
+      const text = message ? String(message.content || '') : '';
+      if (!text) throw new Error('رد فارغ من ' + AI_PROVIDERS[provider].name);
+      return text;
+    }
+
+    async function aiRequest(prompt, imageDataUrl) {
+      const provider = aiConfig.provider;
+      const key = (aiConfig.keys[provider] || '').trim();
+      const model = currentModel(provider);
+      if (!key) throw new Error('لم تُدخل مفتاح API لهذا المزوّد. أضفه، أو استخدم «نسخ البرومبت» وألصق الرد.');
+      try {
+        if (provider === 'gemini') return await callGemini(key, model, prompt, imageDataUrl || '');
+        return await callOpenAiStyle(provider, key, model, prompt, imageDataUrl || '');
+      } catch (err) {
+        if (err && err.name === 'TypeError') {
+          throw new Error('تعذّر الاتصال بـ ' + AI_PROVIDERS[provider].name +
+            ' من المتصفح (CORS أو لا يوجد إنترنت). استخدم «نسخ البرومبت» فهو يعمل دائماً.');
+        }
+        throw err;
+      }
+    }
+
+    function extractJson(text) {
+      let s = String(text || '').trim();
+      s = s.replace(/^```[a-zA-Z]*\s*/, '').replace(/```\s*$/, '').trim();
+      const start = s.indexOf('{');
+      const end = s.lastIndexOf('}');
+      if (start === -1 || end <= start) throw new Error('لم أجد كائن JSON في رد المساعد');
+      try {
+        return JSON.parse(s.slice(start, end + 1));
+      } catch (err) {
+        throw new Error('رد المساعد ليس JSON صالحاً');
+      }
+    }
+
+    function normalizeLineIndexes(value, count) {
+      if (!Array.isArray(value) || !count) return [];
+      const nums = value.map((v) => Number(v)).filter((n) => Number.isInteger(n));
+      if (!nums.length) return [];
+      /* بعض الموديلات ترقّم من 1 بدل 0 — نكتشفها ونصححها تلقائياً */
+      const looksOneBased = Math.max.apply(null, nums) >= count;
+      const out = [];
+      nums.forEach((n) => {
+        const i = looksOneBased ? n - 1 : n;
+        if (i >= 0 && i < count) out.push(i);
+      });
+      return out;
+    }
+
+    /* يحذف علامة الخيار من بداية السطر فقط (أ) / A. / ١-) دون المس بالكلمات */
+    function cleanOptionLine(text) {
+      return String(text || '')
+        .replace(MARKER_RE, '')
+        .replace(/^[\-*•○●◦◉▪]+\s*/, '')
+        .trim();
+    }
+
+    function applyAiResult(result, lines) {
+      if (!result || typeof result !== 'object') throw new Error('الرد ليس كائناً JSON صالحاً');
+
+      const src = Array.isArray(lines) ? lines : [];
+      const count = src.length;
+
+      /* الأفضل: إعادة بناء النص من أسطر المصدر نفسها = نسخ حرفي 100% */
+      let question = '';
+      const questionIdx = normalizeLineIndexes(result.questionLines, count);
+      if (questionIdx.length) question = questionIdx.map((i) => src[i]).join('\n').trim();
+
+      const fromLines = ['', '', '', ''];
+      if (Array.isArray(result.optionsLines)) {
+        for (let i = 0; i < 4; i++) {
+          const idxs = normalizeLineIndexes(result.optionsLines[i], count);
+          if (idxs.length) fromLines[i] = cleanOptionLine(idxs.map((k) => src[k]).join(' '));
+        }
+      }
+
+      let options = fromLines;
+      if (!options.some(Boolean)) {
+        const raw = Array.isArray(result.options)
+          ? result.options
+          : (Array.isArray(result.optionsText) ? result.optionsText : []);
+        options = [0, 1, 2, 3].map((i) => {
+          const o = raw[i];
+          if (typeof o === 'string') return o.trim();
+          if (o && typeof o.text === 'string') return o.text.trim();
+          return '';
+        });
+      }
+
+      if (!question && typeof result.questionText === 'string') question = result.questionText.trim();
+      if (!question && typeof result.question === 'string') question = result.question.trim();
+
+      if (!question && !options.some(Boolean)) throw new Error('الرد لا يحتوي سؤالاً ولا خيارات');
+
+      if (question) $('questionText').value = question;
+
+      formState.options = options.map((text) => ({ text, img: '' }));
+      const ci = Number(result.correctIndex);
+      formState.correctIndex = (Number.isInteger(ci) && ci >= 0 && ci <= 3) ? ci : 0;
+
+      if (typeof result.explanation === 'string' && result.explanation.trim()) {
+        $('cardExplanation').value = result.explanation.trim();
+      }
+      if (typeof result.category === 'string' && result.category.trim() && !$('cardCategory').value.trim()) {
+        $('cardCategory').value = result.category.trim().slice(0, 60);
+      }
+
+      renderOptionInputs();
+      updatePreview();
+    }
+
+    async function runAiAnalysis() {
+      if (aiBusy) {
+        toast('عملية تحليل جارية بالفعل.', 'warn');
+        return;
+      }
+      const provider = aiConfig.provider;
+      const key = (aiConfig.keys[provider] || '').trim();
+      const text = sourceText();
+      const useImageBox = $('aiUseImage');
+      const wantsImage = useImageBox ? useImageBox.checked : true;
+      const image = (wantsImage && AI_PROVIDERS[provider].supportsImage)
+        ? (lastSourceImage || formState.questionImg)
+        : '';
+
+      if (!text && !image) {
+        toast('لا يوجد نص أو صورة لتحليلها.', 'warn');
+        return;
+      }
+      if (!key) {
+        openAiModal();
+        setAiStatus('أضف مفتاح API لـ ' + AI_PROVIDERS[provider].name +
+          '، أو استخدم «نسخ البرومبت» وألصق رد المساعد في الأسفل — يعمل بدون مفتاح.', 'warn');
+        return;
+      }
+
+      aiBusy = true;
+      setAiStatus('جاري قراءة الكلمات وحل السؤال عبر ' + AI_PROVIDERS[provider].short + '...', 'info');
+
+      try {
+        const prompt = buildPrompt();
+        const raw = await aiRequest(prompt, image);
+        const result = extractJson(raw);
+        applyAiResult(result, lastAiLines);
+        setAiStatus('تم التحليل ✔ — النص منسوخ حرفياً من المصدر، والإجابة الصحيحة محددة.', 'ok');
+        toast('تم تحليل السؤال ✔', 'ok');
+        closeAiModal();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } catch (err) {
+        setAiStatus(err && err.message ? err.message : 'فشل التحليل', 'err');
+        toast(err && err.message ? err.message : 'فشل التحليل', 'err');
+      } finally {
+        aiBusy = false;
+      }
+    }
+
+    async function testAiConnection() {
+      if (aiBusy) return;
+      aiBusy = true;
+      setAiStatus('جاري اختبار الاتصال...', 'info');
+      try {
+        const raw = await aiRequest('أعد JSON فقط بالضبط: {"ok":true}', '');
+        const result = extractJson(raw);
+        setAiStatus(result.ok ? 'الاتصال ناجح ✔ المفتاح والموديل يعملان.' : 'وصل رد لكن غير متوقع: ' + String(raw).slice(0, 120), result.ok ? 'ok' : 'warn');
+      } catch (err) {
+        setAiStatus(err && err.message ? err.message : 'فشل الاختبار', 'err');
+      } finally {
+        aiBusy = false;
+      }
+    }
+
+    async function copyText(text) {
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(text);
+          return true;
+        }
+      } catch (e) { /* نجرب الطريقة القديمة */ }
+      try {
+        const box = $('aiPromptBox');
+        box.value = text;
+        box.focus();
+        box.select();
+        return document.execCommand('copy');
+      } catch (e) {
+        return false;
+      }
+    }
+
+    async function buildAndCopyPrompt() {
+      const prompt = buildPrompt();
+      $('aiPromptBox').value = prompt;
+      const ok = await copyText(prompt);
+      setAiStatus(ok
+        ? 'نُسخ البرومبت. الصقه في Gemini أو ChatGPT أو DeepSeek — وإن كانت لديك صورة للسؤال فأرفقها معه داخل المحادثة — ثم الصق رده في المربع الثاني واضغط «تعبئة الحقول».'
+        : 'تعذّر النسخ التلقائي — انسخ النص من مربع البرومبت يدوياً.', ok ? 'ok' : 'warn');
+    }
+
+    async function copyPromptBox() {
+      const prompt = $('aiPromptBox').value;
+      if (!prompt.trim()) {
+        toast('لا يوجد برومبت بعد — اضغط «نسخ البرومبت» أولاً.', 'warn');
+        return;
+      }
+      const ok = await copyText(prompt);
+      setAiStatus(ok ? 'نُسخ البرومبت ✔' : 'تعذّر النسخ، حدّد النص وانسخه يدوياً.', ok ? 'ok' : 'warn');
+    }
+
+    function fillFromReply() {
+      const raw = $('aiReplyBox').value.trim();
+      if (!raw) {
+        setAiStatus('الصق رد المساعد في المربع أولاً.', 'warn');
+        return;
+      }
+      try {
+        const result = extractJson(raw);
+        applyAiResult(result, lastAiLines.length ? lastAiLines : sourceLines());
+        setAiStatus('تم تعبئة الحقول من الرد ✔', 'ok');
+        toast('تمت التعبئة من رد المساعد ✔', 'ok');
+        $('aiReplyBox').value = '';
+        closeAiModal();
+      } catch (err) {
+        setAiStatus('تعذّر قراءة الرد: ' + (err && err.message ? err.message : 'صيغة غير معروفة'), 'err');
+      }
+    }
+
+    /* =========================================================
+       أحداث عامة + تهيئة
+       ========================================================= */
+    function onGlobalKey(event) {
+      if (event.key === 'Escape') {
+        closeAiModal();
+        closeLightbox();
+        return;
+      }
+      if ($('studyView').classList.contains('hidden')) return;
+      const active = document.activeElement;
+      if (active && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)) return;
+      if (/^[1-4]$/.test(event.key)) selectStudyAnswer(Number(event.key) - 1);
+    }
+
+    document.addEventListener('paste', async (event) => {
+      const active = document.activeElement;
+      if (active && /^(INPUT|TEXTAREA)$/.test(active.tagName)) return;
+      if ($('createView').classList.contains('hidden')) return;
+      if (!$('aiModal').classList.contains('hidden')) return;
+
+      const dt = event.clipboardData;
+      if (!dt) return;
+      const items = Array.prototype.slice.call(dt.items || []);
+      const item = items.filter((i) => i.kind === 'file' && i.type.indexOf('image/') === 0)[0];
+      if (!item) return;
+
+      event.preventDefault();
+      const file = item.getAsFile();
+      if (file) await processSmartScreenshot(file);
+    });
+
+    function init() {
+      cards = loadCards();
+      aiConfig = loadAiConfig();
+
+      renderOptionInputs();
+      updatePreview();
+      renderSavedCardsList();
+      updateBadges();
+      populateCategoryFilter(false);
+      syncAiUi();
+      updateStorageMeter();
+
+      $('savedCardsList').addEventListener('click', onSavedListClick);
+      $('aiSourceBox').addEventListener('input', function () { aiSourceDirty = true; });
+      document.addEventListener('keydown', onGlobalKey);
+    }
+
+    init();
+  </script>
+</body>
+</html>
